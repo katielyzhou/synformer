@@ -440,6 +440,7 @@ def run_parallel_sampling_return_smiles_no_early_stop(
 
 def run_sampling_one_cpu(
     input: Molecule,
+    output: pathlib.Path,
     model_path: pathlib.Path,
     mat_path: pathlib.Path,
     fpi_path: pathlib.Path,
@@ -465,6 +466,8 @@ def run_sampling_one_cpu(
     }
     _fpindex: FingerprintIndex = pickle.load(open(fpi_path, "rb"))
     _rxn_matrix: ReactantReactionMatrix = pickle.load(open(mat_path, "rb"))
+    
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         sampler = StatePool(
@@ -489,12 +492,11 @@ def run_sampling_one_cpu(
 
         df = sampler.get_dataframe()[: max_results]
 
-        # if len(df) == 0:
-        #     print(f"{input.smiles}: No results for {next_task.smiles}")
-        # else:
-        #     max_sim = df["score"].max()
-        #     print(f"{input.smiles}: {max_sim:.3f} {next_task.smiles}")
     except KeyboardInterrupt:
         print(f"Exiting due to KeyboardInterrupt")
 
-    return df
+    if df.empty:
+        print('No Results Found')
+    else:
+        with open(output, "w") as f:
+            df.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)

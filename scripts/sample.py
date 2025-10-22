@@ -1,4 +1,4 @@
-from synformer.sampler.analog.cli import main
+from synformer.sampler.analog.cli import main_cpu
 
 if __name__ == "__main__":
-    main()
+    main_cpu()
