@@ -439,7 +439,7 @@ def run_parallel_sampling_return_smiles_no_early_stop(
     return df_merge
 
 def run_sampling_one_cpu(
-    input: Molecule,
+    input: list[Molecule],
     output: pathlib.Path,
     model_path: pathlib.Path,
     mat_path: pathlib.Path,
@@ -469,34 +469,66 @@ def run_sampling_one_cpu(
     
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        sampler = StatePool(
-            fpindex=_fpindex,
-            rxn_matrix=_rxn_matrix,
-            mol=input,
-            model=_model,
-            **state_pool_opt,
-        )
-        tl = TimeLimit(time_limit)
-        for _ in range(max_evolve_steps):
-            sampler.evolve(gpu_lock=None, show_pbar=False, time_limit=tl)
-            max_sim = max(
-                [
-                    p.molecule.sim(input, FingerprintOption.morgan_for_tanimoto_similarity())
-                    for p in sampler.get_products()
-                ]
-                or [-1]
-            )
-            if max_sim == 1.0:
+    total = len(input)
+    df_all: list[pd.DataFrame] = []
+
+    with open(output, "w") as f:
+        for mol in input:
+            try:
+                sampler = StatePool(
+                    fpindex=_fpindex,
+                    rxn_matrix=_rxn_matrix,
+                    mol=mol,
+                    model=_model,
+                    **state_pool_opt,
+                )
+                tl = TimeLimit(time_limit)
+                for _ in range(max_evolve_steps):
+                    sampler.evolve(gpu_lock=None, show_pbar=False, time_limit=tl)
+                    max_sim = max(
+                        [
+                            p.molecule.sim(mol, FingerprintOption.morgan_for_tanimoto_similarity())
+                            for p in sampler.get_products()
+                        ]
+                        or [-1]
+                    )
+                    if max_sim == 1.0:
+                        break
+
+                df = sampler.get_dataframe()[: max_results]
+
+                if df.empty:
+                    print(f"No result for {mol}")
+                else:
+                    # Save all results
+                    #df.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
+                    df_all.append(df)
+
+                    # Save the one with highest score
+                    df_top = df[df["score"] == df["score"].max()].head(1)
+                    df_top.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
+                    print(df_top["synthesis"])
+
+            except KeyboardInterrupt:
+                print(f"Exiting due to KeyboardInterrupt")
                 break
 
-        df = sampler.get_dataframe()[: max_results]
+    if df_all:
+        df_merge = pd.concat(df_all, ignore_index=True)
+        print(df_merge.loc[df_merge.groupby("target").idxmax()["score"]].select_dtypes(include="number").sum() / total)
 
-    except KeyboardInterrupt:
-        print(f"Exiting due to KeyboardInterrupt")
+        count_success = len(df_merge["target"].unique())
+        print(f"Success rate: {count_success}/{total} = {count_success / total:.3f}")
 
-    if df.empty:
-        print('No Results Found')
+        recons_targets: set[str] = set()
+        for _, row in df_merge.iterrows():
+            if row["score"] == 1.0:
+                mol_target = Molecule(row["target"])
+                mol_recons = Molecule(row["smiles"])
+                if mol_recons.csmiles == mol_target.csmiles:
+                    recons_targets.add(row["target"])
+        count_recons = len(recons_targets)
+        print(f"Reconstruction rate: {count_recons}/{total} = {count_recons / total:.3f}")
+    
     else:
-        with open(output, "w") as f:
-            df.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
+        print("No results found.")

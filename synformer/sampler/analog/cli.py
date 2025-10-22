@@ -54,9 +54,6 @@ def main(
         sort_by_scores=not dont_sort,
     )
 
-def _input_mols_option(p):
-    return list(read_mol_file(p))[0]
-
 @click.command()
 @click.option("--input", "-i", type=_input_mols_option, required=True)
 @click.option("--output", "-o", type=click.Path(exists=False, path_type=pathlib.Path), required=True)
@@ -85,7 +82,7 @@ def _input_mols_option(p):
 @click.option("--max_evolve_steps", type=int, default=12)
 @click.option("--dont-sort", is_flag=True)
 def main_cpu(
-    input: Molecule,
+    input: list[Molecule],
     output: pathlib.Path,
     model_path: pathlib.Path,
     mat_path: pathlib.Path,
