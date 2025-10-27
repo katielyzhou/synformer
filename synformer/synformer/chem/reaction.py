@@ -1,7 +1,8 @@
 import os
 from collections.abc import Iterable, Sequence
-from functools import cached_property
+from functools import cached_property, partial
 from typing import overload
+from tqdm.auto import tqdm
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw, rdChemReactions
@@ -157,3 +158,45 @@ def read_reaction_file(path: os.PathLike) -> list[Reaction]:
                 continue
             reactions.append(Reaction(line))
     return reactions
+
+
+def read_novel_templates(
+    path: os.PathLike,
+    show_pbar: bool = True,
+    pbar_fn=partial(tqdm, desc="Reading novel templates"),
+    default_score: float = 1.0
+) -> list[tuple[Reaction, float]]:
+    """
+    Read a text file of novel reaction templates.
+
+    Each line should contain:
+        template [score]
+    where score is optional (default: `default_score`).
+
+    Lines starting with '#' or empty lines are ignored.
+
+    Args:
+        path: Path to the novel templates text file.
+        show_pbar: Whether to show a progress bar.
+        pbar_fn: Function to wrap the iterator for progress bar.
+        default_score: Default score if not specified in the file.
+
+    Yields:
+        Tuples of (template, score)
+    """
+    templates: list[tuple[Reaction, float]] = []
+
+    with open(path, "r") as f:
+        lines = (line.strip() for line in f)
+        lines = (line for line in lines if line and not line.startswith("#"))
+
+        if show_pbar:
+            lines = pbar_fn(lines)
+
+        for line in lines:
+            parts = line.split()
+            template_str = parts[0]
+            score = float(parts[1]) if len(parts) > 1 else default_score
+            templates.append((Reaction(template_str), score))
+
+    return templates

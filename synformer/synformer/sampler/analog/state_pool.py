@@ -14,6 +14,7 @@ from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
 from synformer.chem.mol import FingerprintOption, Molecule
 from synformer.chem.stack import Stack
+from synformer.chem.reaction import Reaction
 from synformer.data.collate import (
     apply_collate,
     collate_1d_features,
@@ -69,10 +70,12 @@ class StatePool:
         factor: int = 16,
         max_active_states: int = 256,
         sort_by_score: bool = True,
+        novel_templates: list[tuple[Reaction, float]] | None = None
     ) -> None:
         super().__init__()
         self._fpindex = fpindex
         self._rxn_matrix = rxn_matrix
+        self._novel_templates = novel_templates
 
         self._model = model
         self._mol = mol
@@ -178,8 +181,7 @@ class StatePool:
 
         best_token = result.best_token()
         top_reactants = result.top_reactants(topk=m)
-        top_reactions = result.top_reactions(topk=m, rxn_matrix=self._rxn_matrix)
-
+        top_reactions = result.top_reactions(topk=m, rxn_matrix=self._rxn_matrix, novel_templates=self._novel_templates)
         next: list[State] = []
         for i, j in nm_iter:
             if time_limit is not None and time_limit.exceeded():

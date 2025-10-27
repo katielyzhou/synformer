@@ -14,6 +14,7 @@ from tqdm.auto import tqdm
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
 from synformer.chem.mol import FingerprintOption, Molecule
+from synformer.chem.reaction import Reaction
 from synformer.models.synformer import Synformer
 from synformer.sampler.analog.state_pool import StatePool, TimeLimit
 
@@ -444,6 +445,7 @@ def run_sampling_one_cpu(
     model_path: pathlib.Path,
     mat_path: pathlib.Path,
     fpi_path: pathlib.Path,
+    novel_templates: list[tuple[Reaction, float]] | None,
     search_width: int = 24,
     exhaustiveness: int = 64,
     time_limit: int = 180,
@@ -480,6 +482,7 @@ def run_sampling_one_cpu(
                     rxn_matrix=_rxn_matrix,
                     mol=mol,
                     model=_model,
+                    novel_templates=novel_templates,
                     **state_pool_opt,
                 )
                 tl = TimeLimit(time_limit)
@@ -501,13 +504,13 @@ def run_sampling_one_cpu(
                     print(f"No result for {mol}")
                 else:
                     # Save all results
-                    #df.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
+                    df.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
                     df_all.append(df)
 
                     # Save the one with highest score
-                    df_top = df[df["score"] == df["score"].max()].head(1)
-                    df_top.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
-                    print(df_top["synthesis"])
+                    #df_top = df[df["score"] == df["score"].max()].head(1)
+                    #df_top.to_csv(f, float_format="%.3f", index=False, header=f.tell() == 0)
+                    #print(df_top["synthesis"])
 
             except KeyboardInterrupt:
                 print(f"Exiting due to KeyboardInterrupt")

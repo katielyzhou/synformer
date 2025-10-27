@@ -3,6 +3,7 @@ import dataclasses
 import torch
 from torch import nn
 from tqdm.auto import tqdm
+import math
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -56,9 +57,9 @@ class PredictResult:
     def best_token(self) -> list[TokenType]:
         return [TokenType(t) for t in self.token_logits.argmax(dim=-1).detach().cpu().tolist()]
 
-    def top_reactions(self, topk: int, rxn_matrix: ReactantReactionMatrix) -> list[list[_ReactionItem]]:
+    def top_reactions(self, topk: int, rxn_matrix: ReactantReactionMatrix, novel_templates: list[tuple[Reaction, float]] | None = None,) -> list[list[_ReactionItem]]:
         topk = min(topk, self.reaction_logits.size(-1))
-        logit, index = self.reaction_logits.topk(topk, dim=-1, largest=True)
+        logit, index = self.reaction_logits.topk(topk, dim=-1, largest=True) # Return top k largest values, where logit = reaction and index = position in reaction_logits
         bsz = logit.size(0)
         out: list[list[_ReactionItem]] = []
         for i in range(bsz):
@@ -72,8 +73,67 @@ class PredictResult:
                         score=float(logit[i, j].item()),
                     )
                 )
+
+            priors = [item.score for item in out_i] # sum of softmax of this should be equal to 1
+
+            if novel_templates:
+                out_i, norm_priors = self._integrate_novel_templates(
+                    possible_actions=out_i,
+                    priors=priors,
+                    novel_templates=novel_templates,
+                    rxn_matrix = rxn_matrix,
+                )
+
+                out_i = out_i[:topk]
+
             out.append(out_i)
+
         return out
+    
+
+    def _integrate_novel_templates(self, possible_actions, priors, novel_templates, rxn_matrix=None):
+        """
+        Merge novel templates into the list of _ReactionItem, normalize scores,
+        and assign unique indices for multiple novel templates.
+
+        Args:
+            possible_actions: list[_ReactionItem] — existing model predictions
+            priors: list[float] — current scores of existing actions
+            foreign_templates: list[tuple[Reaction|str, float]] — (template, score)
+            rxn_matrix: optional, used to assign unique indices for novel templates
+
+        Returns:
+            updated possible_actions, normalized_scores
+        """
+        max_prior = max(priors) if priors else 0.0
+        min_prior = min(priors) if priors else 0.0
+        prior_range = max_prior - min_prior
+
+        base_index = len(rxn_matrix.reactions) if rxn_matrix else max([a.index for a in possible_actions], default=-1) + 1
+
+        for i, (template, score) in enumerate(novel_templates):
+            new_prior = min_prior + (score * prior_range)
+    
+            unique_index = base_index + i
+
+            new_action = _ReactionItem(
+                reaction=template,
+                index=unique_index,
+                score=new_prior
+            )
+            possible_actions.append(new_action)
+            priors.append(new_prior)
+
+
+        exp_priors = [math.exp(p - max_prior) for p in priors]
+        sum_exp = sum(exp_priors)
+        norm_priors = [p / sum_exp for p in exp_priors]
+
+        sorted_pairs = sorted(zip(norm_priors, possible_actions), key=lambda x: x[0], reverse=True)
+        norm_priors, possible_actions = zip(*sorted_pairs)
+
+        return list(possible_actions), list(norm_priors)
+
 
     def top_reactants(self, topk: int) -> list[list[_ReactantItem]]:
         bsz = self.retrieved_reactants.reactants.shape[0]
@@ -364,8 +424,8 @@ class Synformer(nn.Module):
 
             # Reaction
             rxn_idx_next = torch.multinomial(
-                torch.nn.functional.softmax(pred.reaction_logits / temperature_reaction, dim=-1),
-                num_samples=1,
+                torch.nn.functional.softmax(pred.reaction_logits / temperature_reaction, dim=-1), # Probabilities of each reaction logit
+                num_samples=1, # Pick the reaction with the highest probability
             )[..., 0]
             rxn_indices = torch.cat([rxn_indices, rxn_idx_next[..., None]], dim=-1)
             for b, idx in enumerate(rxn_idx_next):
