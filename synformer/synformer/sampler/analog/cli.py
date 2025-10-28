@@ -56,7 +56,7 @@ def main(
     )
 
 
-def _novel_templates_option(p: str) -> list[tuple[str, float]]:
+def _novel_templates_option(p: str) -> list[tuple[Reaction, float]]:
     path = pathlib.Path(p)
     if not path.exists():
         return []
