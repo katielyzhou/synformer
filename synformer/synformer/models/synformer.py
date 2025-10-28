@@ -112,7 +112,7 @@ class PredictResult:
         base_index = len(rxn_matrix.reactions) if rxn_matrix else max([a.index for a in possible_actions], default=-1) + 1
 
         for i, (template, score) in enumerate(novel_templates):
-            new_prior = min_prior + (score * prior_range)
+            new_prior = min_prior + (score * prior_range) + (score * prior_range)
     
             unique_index = base_index + i
 
