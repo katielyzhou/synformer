@@ -126,8 +126,7 @@ class PredictResult:
 
 
         exp_priors = [math.exp(p - max_prior) for p in priors]
-        sum_exp = sum(exp_priors)
-        norm_priors = [p / sum_exp for p in exp_priors]
+        norm_priors = [p / sum(exp_priors) for p in exp_priors]
 
         sorted_pairs = sorted(zip(norm_priors, possible_actions), key=lambda x: x[0], reverse=True)
         norm_priors, possible_actions = zip(*sorted_pairs)
@@ -135,7 +134,7 @@ class PredictResult:
         return list(possible_actions), list(norm_priors)
 
 
-    def top_reactants(self, topk: int) -> list[list[_ReactantItem]]:
+    def top_reactants(self, topk: int, rxn_matrix: ReactantReactionMatrix, building_blocks: list[tuple[Molecule, float]] | None = None,) -> list[list[_ReactantItem]]:
         bsz = self.retrieved_reactants.reactants.shape[0]
         score_all = 1.0 / (self.retrieved_reactants.distance.reshape(bsz, -1) + 0.1)
         index_all = self.retrieved_reactants.indices.reshape(bsz, -1)
@@ -156,8 +155,51 @@ class PredictResult:
                         score=score_all[i, idx],
                     )
                 )
+
+            priors = [item.score for item in out_i]
+
+            if building_blocks:
+                out_i, altered_priors = self._integrate_biased_bb(
+                    possible_actions=out_i,
+                    priors=priors,
+                    building_blocks=building_blocks,
+                    rxn_matrix = rxn_matrix,
+                )
+
+                out_i = out_i[:topk]
+
             out.append(out_i)
+
         return out
+    
+
+    def _integrate_biased_bb(self, possible_actions, priors, building_blocks, rxn_matrix=None):
+
+        max_prior = max(priors) if priors else 0.0
+        min_prior = min(priors) if priors else 0.0
+        prior_range = max_prior - min_prior
+
+        for i, (bb, score) in enumerate(building_blocks):
+
+            if bb in rxn_matrix.reactants:
+                new_prior = min_prior + (score * prior_range) + 0.1
+
+                new_action = _ReactantItem(
+                    reactant=bb,
+                    index=rxn_matrix.reactants.index(bb),
+                    score=new_prior
+                )
+
+                possible_actions.append(new_action)
+                priors.append(new_prior)
+
+            else:
+                print(f"{bb.csmiles} not in catalogue; skipping...")
+
+        sorted_pairs = sorted(zip(priors, possible_actions), key=lambda x: x[0], reverse=True)
+        priors, possible_actions = zip(*sorted_pairs)
+
+        return list(possible_actions), list(priors)
 
 
 @dataclasses.dataclass

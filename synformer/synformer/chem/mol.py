@@ -267,3 +267,19 @@ def write_to_smi(path: os.PathLike, mols: Sequence[Molecule]):
     with open(path, "w") as f:
         for mol in mols:
             f.write(f"{mol.smiles}\n")
+
+
+def read_biased_blocks(
+    path: os.PathLike,
+) -> list[tuple[Molecule, float]]:
+    
+    molecules = list(read_mol_file(path))
+
+    df = pd.read_csv(path)
+    if "score" in df.columns:
+        score_col = "score"
+        f = list(df[score_col])
+    else:
+        raise ValueError(f"Cannot find score column in {path}")
+    
+    return zip(molecules, f)

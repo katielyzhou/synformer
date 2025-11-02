@@ -70,12 +70,14 @@ class StatePool:
         factor: int = 16,
         max_active_states: int = 256,
         sort_by_score: bool = True,
-        novel_templates: list[tuple[Reaction, float]] | None = None
+        novel_templates: list[tuple[Reaction, float]] | None = None,
+        building_blocks = list[tuple[Molecule, float]] | None,
     ) -> None:
         super().__init__()
         self._fpindex = fpindex
         self._rxn_matrix = rxn_matrix
         self._novel_templates = novel_templates
+        self._building_blocks = building_blocks
 
         self._model = model
         self._mol = mol
@@ -180,7 +182,7 @@ class StatePool:
             nm_iter = tqdm(nm_iter, total=n * m, desc="evolve", dynamic_ncols=True)
 
         best_token = result.best_token()
-        top_reactants = result.top_reactants(topk=m)
+        top_reactants = result.top_reactants(topk=m, rxn_matrix=self._rxn_matrix, building_blocks=self._building_blocks)
         top_reactions = result.top_reactions(topk=m, rxn_matrix=self._rxn_matrix, novel_templates=self._novel_templates)
         next: list[State] = []
         for i, j in nm_iter:

@@ -446,9 +446,10 @@ def run_sampling_one_cpu(
     mat_path: pathlib.Path,
     fpi_path: pathlib.Path,
     novel_templates: list[tuple[Reaction, float]] | None,
-    search_width: int = 24,
+    building_blocks = list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
+    search_width: int = 32,
     exhaustiveness: int = 64,
-    time_limit: int = 180,
+    time_limit: int = 300,
     max_results: int = 100,
     max_evolve_steps: int = 12,
     sort_by_scores: bool = True,
@@ -483,6 +484,7 @@ def run_sampling_one_cpu(
                     mol=mol,
                     model=_model,
                     novel_templates=novel_templates,
+                    building_blocks=building_blocks,
                     **state_pool_opt,
                 )
                 tl = TimeLimit(time_limit)
@@ -495,8 +497,9 @@ def run_sampling_one_cpu(
                         ]
                         or [-1]
                     )
-                    if max_sim == 1.0:
-                        break
+                    
+                    #if max_sim == 1.0:
+                    #    break
 
                 df = sampler.get_dataframe()[: max_results]
 
