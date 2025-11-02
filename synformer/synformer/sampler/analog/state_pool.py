@@ -222,14 +222,14 @@ class StatePool:
         self._sort_states()
 
     def get_products(self) -> Iterable[_ProductInfo]:
-        visited: set[Molecule] = set()
+        seen_syntheses: set[str] = set()  # Track unique synthesis routes
         for state in self._finished:
             for mol in state.stack.get_top():
-                if mol in visited:
+                synthesis = state.stack.get_action_string()
+                if synthesis in seen_syntheses:
                     continue
+                seen_syntheses.add(synthesis)
                 yield _ProductInfo(mol, state.stack)
-                visited.add(mol)
-        yield from []
 
     def get_dataframe(self, num_calc_extra_metrics: int = 10) -> pd.DataFrame:
         rows: list[dict[str, str | float]] = []
