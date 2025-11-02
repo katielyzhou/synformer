@@ -74,23 +74,23 @@ def _novel_templates_option(p: str) -> list[tuple[Reaction, float]]:
 )
 @click.option(
     "--fpi-path",
-    "-m",
+    "-f",
     type=click.Path(exists=True, path_type=pathlib.Path),
     default="data/fpindex.pkl",
 )
 @click.option(
     "--mat-path",
-    "-m",
+    "-p",
     type=click.Path(exists=True, path_type=pathlib.Path),
     default="data/matrix.pkl",
 )
-@click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
 @click.option("--search-width", type=int, default=24)
 @click.option("--exhaustiveness", type=int, default=64)
 @click.option("--time-limit", type=int, default=180)
 @click.option("--max_results", type=int, default=100)
 @click.option("--max_evolve_steps", type=int, default=12)
 @click.option("--dont-sort", is_flag=True)
+@click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
 def main_cpu(
     input: list[Molecule],
     output: pathlib.Path,
