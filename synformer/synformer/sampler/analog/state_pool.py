@@ -5,6 +5,7 @@ import time
 from collections.abc import Iterable
 from functools import cached_property
 from multiprocessing.synchronize import Lock
+from itertools import permutations, product
 
 import pandas as pd
 import torch
@@ -70,8 +71,9 @@ class StatePool:
         factor: int = 16,
         max_active_states: int = 256,
         sort_by_score: bool = True,
+        score_min: float = 0.0,
         novel_templates: list[tuple[Reaction, float]] | None = None,
-        building_blocks = list[tuple[Molecule, float]] | None,
+        building_blocks: list[tuple[Molecule, float]] | None = None,
     ) -> None:
         super().__init__()
         self._fpindex = fpindex
@@ -94,6 +96,7 @@ class StatePool:
         self._factor = factor
         self._max_active_states = max_active_states
         self._sort_by_score = sort_by_score
+        self._score_min = score_min
 
         self._active: list[State] = [State()]
         self._finished: list[State] = []
@@ -225,10 +228,21 @@ class StatePool:
         seen_syntheses: set[str] = set()  # Track unique synthesis routes
         for state in self._finished:
             for mol in state.stack.get_top():
+
+                score = self._mol.sim(mol, FingerprintOption.morgan_for_tanimoto_similarity())
+                if score < self._score_min:
+                    continue
+                
                 synthesis = state.stack.get_action_string()
                 if synthesis in seen_syntheses:
                     continue
-                seen_syntheses.add(synthesis)
+
+                # Add alternative representations/combinations to seen_synthesis too
+                sequence = synthesis.split(";")
+                permuted_routes = permute_synthesis_string(sequence)
+                permuted_strs = {";".join(p) for p in permuted_routes}
+                seen_syntheses.update(permuted_strs)
+
                 yield _ProductInfo(mol, state.stack)
 
     def get_dataframe(self, num_calc_extra_metrics: int = 10) -> pd.DataFrame:
@@ -262,3 +276,44 @@ class StatePool:
         print(f"Active: {len(self._active)}")
         print(f"Finished: {len(self._finished)}")
         print(f"Aborted: {len(self._aborted)}")
+
+
+def is_rxn(item):
+    return item.startswith('R') and item[1:].isdigit()
+
+def permute_synthesis_string(sequence):
+    blocks = []
+    rxn_labels = []
+    temp_smiles = []
+
+    for item in sequence:
+        if is_rxn(item):
+            # Save permutations of current SMILES block
+            if temp_smiles:
+                blocks.append(list(permutations(temp_smiles)))
+                temp_smiles = []
+            else:
+                # If no SMILES before reaction label (trailing SMILES), add an empty block
+                blocks.append([()])
+            rxn_labels.append(item)
+        else:
+            temp_smiles.append(item)
+
+    # Trailing SMILES
+    if temp_smiles:
+        blocks.append(list(permutations(temp_smiles)))
+
+    # Generate all combinations across blocks
+    all_combinations = product(*blocks)
+
+    # Flatten each combination and insert RXN labels between blocks
+    result = []
+    for combo in all_combinations:
+        flat_list = []
+        for i, block in enumerate(combo):
+            flat_list.extend(block)
+            if i < len(rxn_labels):
+                flat_list.append(rxn_labels[i])
+        result.append(flat_list)
+    
+    return result

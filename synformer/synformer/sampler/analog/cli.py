@@ -95,6 +95,7 @@ def _building_blocks_option(p: str) -> list[tuple[Molecule, float]]:
 @click.option("--max_results", type=int, default=100)
 @click.option("--max_evolve_steps", type=int, default=12)
 @click.option("--dont-sort", is_flag=True)
+@click.option("--score-min", type=float, default=0.0)
 @click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
 @click.option("--building-blocks", "-bb", type=_building_blocks_option, default=None)
 def main_cpu(
@@ -109,8 +110,9 @@ def main_cpu(
     max_results: int,
     max_evolve_steps: int,
     dont_sort: bool,
-    novel_templates = list[tuple[Reaction, float]] | None,
-    building_blocks = list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
+    score_min: float,
+    novel_templates: list[tuple[Reaction, float]] | None,
+    building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
 ):
     run_sampling_one_cpu(
         input=input,
@@ -126,6 +128,7 @@ def main_cpu(
         max_results = max_results,
         max_evolve_steps = max_evolve_steps,
         sort_by_scores=not dont_sort,
+        score_min=score_min,
     )
 
 

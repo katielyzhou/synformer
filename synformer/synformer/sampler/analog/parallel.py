@@ -446,7 +446,8 @@ def run_sampling_one_cpu(
     mat_path: pathlib.Path,
     fpi_path: pathlib.Path,
     novel_templates: list[tuple[Reaction, float]] | None,
-    building_blocks = list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
+    building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
+    score_min: float = 0.0,
     search_width: int = 32,
     exhaustiveness: int = 64,
     time_limit: int = 300,
@@ -483,6 +484,7 @@ def run_sampling_one_cpu(
                     rxn_matrix=_rxn_matrix,
                     mol=mol,
                     model=_model,
+                    score_min=score_min,
                     novel_templates=novel_templates,
                     building_blocks=building_blocks,
                     **state_pool_opt,
