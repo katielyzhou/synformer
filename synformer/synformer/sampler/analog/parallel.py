@@ -50,9 +50,9 @@ class Worker(mp.Process):
         self._max_results = max_results
         self._time_limit = time_limit
 
-        self._score_min=score_min,
-        self._novel_templates=novel_templates,
-        self._building_blocks=building_blocks,
+        self._score_min=score_min
+        self._novel_templates=novel_templates
+        self._building_blocks=building_blocks
 
     def run(self) -> None:
         os.sched_setaffinity(0, range(os.cpu_count() or 1))
@@ -107,8 +107,6 @@ class Worker(mp.Process):
                 ]
                 or [-1]
             )
-            if max_sim == 1.0:
-                break
 
         df = sampler.get_dataframe()[: self._max_results]
         return df
