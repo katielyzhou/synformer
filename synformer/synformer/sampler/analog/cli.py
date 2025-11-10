@@ -10,6 +10,18 @@ from synformer.chem.reaction import Reaction, read_novel_templates
 def _input_mols_option(p):
     return list(read_mol_file(p))
 
+def _novel_templates_option(p: str) -> list[tuple[Reaction, float]]:
+    path = pathlib.Path(p)
+    if not path.exists():
+        return []
+    return list(read_novel_templates(path))
+
+def _building_blocks_option(p: str) -> list[tuple[Molecule, float]]:
+    path = pathlib.Path(p)
+    if not path.exists():
+        return []
+    return list(read_biased_blocks(path))
+
 
 @click.command()
 @click.option("--input", "-i", type=_input_mols_option, required=True)
@@ -28,6 +40,9 @@ def _input_mols_option(p):
 @click.option("--result-qsize", type=int, default=0)
 @click.option("--time-limit", type=int, default=180)
 @click.option("--dont-sort", is_flag=True)
+@click.option("--score-min", type=float, default=0.0)
+@click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
+@click.option("--building-blocks", "-bb", type=_building_blocks_option, default=None)
 def main(
     input: list[Molecule],
     output: pathlib.Path,
@@ -40,11 +55,16 @@ def main(
     result_qsize: int,
     time_limit: int,
     dont_sort: bool,
+    score_min: float,
+    novel_templates: list[tuple[Reaction, float]] | None,
+    building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
 ):
     run_parallel_sampling(
         input=input,
         output=output,
         model_path=model_path,
+        novel_templates=novel_templates,
+        building_blocks=building_blocks,
         search_width=search_width,
         exhaustiveness=exhaustiveness,
         num_gpus=num_gpus,
@@ -53,20 +73,10 @@ def main(
         result_qsize=result_qsize,
         time_limit=time_limit,
         sort_by_scores=not dont_sort,
+        score_min=score_min,
     )
 
 
-def _novel_templates_option(p: str) -> list[tuple[Reaction, float]]:
-    path = pathlib.Path(p)
-    if not path.exists():
-        return []
-    return list(read_novel_templates(path))
-
-def _building_blocks_option(p: str) -> list[tuple[Molecule, float]]:
-    path = pathlib.Path(p)
-    if not path.exists():
-        return []
-    return list(read_biased_blocks(path))
 
 @click.command()
 @click.option("--input", "-i", type=_input_mols_option, required=True)
@@ -89,7 +99,7 @@ def _building_blocks_option(p: str) -> list[tuple[Molecule, float]]:
     type=click.Path(exists=True, path_type=pathlib.Path),
     default="data/matrix.pkl",
 )
-@click.option("--search-width", type=int, default=32)
+@click.option("--search-width", type=int, default=24)
 @click.option("--exhaustiveness", type=int, default=64)
 @click.option("--time-limit", type=int, default=180)
 @click.option("--max_results", type=int, default=100)
