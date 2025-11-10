@@ -34,6 +34,9 @@ class Worker(mp.Process):
         max_evolve_steps: int = 12,
         max_results: int = 100,
         time_limit: int = 120,
+        novel_templates: list[tuple[Reaction, float]] | None = None,
+        building_blocks: list[tuple[Molecule, float]] | None = None,
+        score_min: float = 0.0,
     ):
         super().__init__()
         self._model_path = model_path
@@ -46,6 +49,10 @@ class Worker(mp.Process):
         self._max_evolve_steps = max_evolve_steps
         self._max_results = max_results
         self._time_limit = time_limit
+
+        self._score_min=score_min,
+        self._novel_templates=novel_templates,
+        self._building_blocks=building_blocks,
 
     def run(self) -> None:
         os.sched_setaffinity(0, range(os.cpu_count() or 1))
@@ -85,6 +92,9 @@ class Worker(mp.Process):
             rxn_matrix=self._rxn_matrix,
             mol=mol,
             model=self._model,
+            score_min=self._score_min,
+            novel_templates=self._novel_templates,
+            building_blocks=self._building_blocks,
             **self._state_pool_opt,
         )
         tl = TimeLimit(self._time_limit)
@@ -293,6 +303,9 @@ def run_parallel_sampling(
     input: list[Molecule],
     output: pathlib.Path,
     model_path: pathlib.Path,
+    novel_templates: list[tuple[Reaction, float]] | None,
+    building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
+    score_min: float = 0.0,
     search_width: int = 24,
     exhaustiveness: int = 64,
     num_gpus: int = -1,
@@ -315,6 +328,9 @@ def run_parallel_sampling(
             "sort_by_score": sort_by_scores,
         },
         time_limit=time_limit,
+        score_min=score_min,
+        novel_templates=novel_templates,
+        building_blocks=building_blocks,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -448,7 +464,7 @@ def run_sampling_one_cpu(
     novel_templates: list[tuple[Reaction, float]] | None,
     building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
     score_min: float = 0.0,
-    search_width: int = 32,
+    search_width: int = 24,
     exhaustiveness: int = 64,
     time_limit: int = 300,
     max_results: int = 100,
