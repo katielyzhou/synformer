@@ -37,8 +37,7 @@ class FragmentHead:
 
     def predict(self, h: torch.Tensor, target_mol: Molecule) -> torch.Tensor:
         """
-        Return a list of candidate fragments to consider for building blocks.
-        If intermediate_mol is provided, remove fragments already present.
+        Return a list of candidate fragment fingerprints to consider for building blocks.
         """
         fragments=BRICS.BRICSDecompose(target_mol._rdmol)
 
@@ -62,7 +61,7 @@ class FragmentHead:
         topk: int = 4,
     ) -> ReactantRetrievalResult:
         """
-        Retrieve reactants based on fragments rather than predicted fingerprints.
+        Retrieve reactants based on fragments.
     
         Args:
             h:  Tensor of shape (*batch, h_dim).
@@ -103,21 +102,3 @@ class FragmentHead:
             distance=out_dist,
             indices=out_idx,
         )
-
-
-"""
-target = "CC1=CC(C2CCC2)=NC3=CC=CC=C13"
-target_mol = Molecule.from_rdmol(Chem.MolFromSmiles(target))
-fragments=BRICS.BRICSDecompose(Chem.MolFromSmiles(target))
-topk = 3
-
-def get_sim(fp1, fp2):
-    return DataStructs.TanimotoSimilarity(fp1, fp2)
-
-reactant_fps = [AllChem.GetMorganFingerprintAsBitVect(mol._rdmol, 2, 4096) for mol in matrix.reactants]
-
-for frag in fragments:
-    frag_fp = AllChem.GetMorganFingerprintAsBitVect(Chem.MolFromSmiles(frag), 2, 4096)
-    sim_scores = [get_sim(frag_fp, fp) for fp in reactant_fps]
-    topk_indices = np.argsort(sim_scores)[-topk:][::-1]
-"""
