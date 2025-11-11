@@ -2,6 +2,7 @@ import copy
 import dataclasses
 import itertools
 import time
+import random
 from collections.abc import Iterable
 from functools import cached_property
 from multiprocessing.synchronize import Lock
@@ -10,6 +11,7 @@ from itertools import permutations, product
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
+from rdkit.Chem import BRICS
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -72,6 +74,7 @@ class StatePool:
         max_active_states: int = 256,
         sort_by_score: bool = True,
         score_min: float = 0.0,
+        prob_diffusion: float = 1.0,
         novel_templates: list[tuple[Reaction, float]] | None = None,
         building_blocks: list[tuple[Molecule, float]] | None = None,
     ) -> None:
@@ -97,6 +100,7 @@ class StatePool:
         self._max_active_states = max_active_states
         self._sort_by_score = sort_by_score
         self._score_min = score_min
+        self._prob = prob_diffusion
 
         self._active: list[State] = [State()]
         self._finished: list[State] = []
@@ -173,6 +177,7 @@ class StatePool:
             fpindex=self._fpindex,
             topk=self._factor,
             result_device=torch.device("cpu"),
+            target_mol=self._mol, # For fragment-based building block search
         )
 
         if gpu_lock is not None:
@@ -188,6 +193,7 @@ class StatePool:
         top_reactants = result.top_reactants(topk=m, rxn_matrix=self._rxn_matrix, building_blocks=self._building_blocks)
         top_reactions = result.top_reactions(topk=m, rxn_matrix=self._rxn_matrix, novel_templates=self._novel_templates)
         next: list[State] = []
+        excl_frag: list = []
         for i, j in nm_iter:
             if time_limit is not None and time_limit.exceeded():
                 break
@@ -198,7 +204,17 @@ class StatePool:
                 self._finished.append(base_state)
 
             elif tok_next == TokenType.REACTANT:
-                reactant, mol_idx, score = top_reactants[i][j]
+                if random.random() < self._prob: # Use diffusion
+                    reactant, mol_idx, score = top_reactants[i][j]
+                else: # Use fragment-based, excluding reactants with fragments already in target
+                    top_reactants_from_frag = result.top_reactants(topk=m,
+                                                                   rxn_matrix=self._rxn_matrix,
+                                                                   building_blocks=self._building_blocks,
+                                                                   diffusion=False,
+                                                                   excl_frag=excl_frag,
+                                                                   )
+                    
+                    reactant, mol_idx, score = top_reactants_from_frag[i][j]
                 new_state = copy.deepcopy(base_state)
                 new_state.stack.push_mol(reactant, mol_idx)
                 new_state.scores.append(score)
@@ -214,6 +230,13 @@ class StatePool:
                     )
                     new_state.scores.append(rxn_score)
                     next.append(new_state)
+                    """
+                    for intermed in new_state.stack.get_top():
+                        frag = BRICS.BRICSDecompose(intermed._rdmol)
+                        frag_target = BRICS.BRICSDecompose(self._mol._rdmol)
+                        frag_in_target = frag & frag_target
+                        excl_frag.extend(frag_in_target)
+                    """
                 else:
                     self._aborted.append(new_state)
 

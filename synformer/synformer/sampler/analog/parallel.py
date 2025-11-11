@@ -37,6 +37,7 @@ class Worker(mp.Process):
         novel_templates: list[tuple[Reaction, float]] | None = None,
         building_blocks: list[tuple[Molecule, float]] | None = None,
         score_min: float = 0.0,
+        prob_diffusion: float = 1.0
     ):
         super().__init__()
         self._model_path = model_path
@@ -51,6 +52,7 @@ class Worker(mp.Process):
         self._time_limit = time_limit
 
         self._score_min=score_min
+        self._prob_diffusion = prob_diffusion
         self._novel_templates=novel_templates
         self._building_blocks=building_blocks
 
@@ -95,6 +97,7 @@ class Worker(mp.Process):
             score_min=self._score_min,
             novel_templates=self._novel_templates,
             building_blocks=self._building_blocks,
+            prob_diffusion=self._prob_diffusion,
             **self._state_pool_opt,
         )
         tl = TimeLimit(self._time_limit)
@@ -312,6 +315,7 @@ def run_parallel_sampling(
     result_qsize: int = 0,
     time_limit: int = 180,
     sort_by_scores: bool = True,
+    prob_diffusion: float = 1.0,
 ) -> None:
     num_gpus = num_gpus if num_gpus > 0 else _count_gpus()
     pool = WorkerPool(
@@ -327,6 +331,7 @@ def run_parallel_sampling(
         },
         time_limit=time_limit,
         score_min=score_min,
+        prob_diffusion=prob_diffusion,
         novel_templates=novel_templates,
         building_blocks=building_blocks,
     )
@@ -468,6 +473,7 @@ def run_sampling_one_cpu(
     max_results: int = 100,
     max_evolve_steps: int = 12,
     sort_by_scores: bool = True,
+    prob_diffusion: float = 1.0,
 ) -> pd.DataFrame:
 
     ckpt = torch.load(model_path, map_location="cpu")
@@ -499,6 +505,7 @@ def run_sampling_one_cpu(
                     mol=mol,
                     model=_model,
                     score_min=score_min,
+                    prob_diffusion=prob_diffusion,
                     novel_templates=novel_templates,
                     building_blocks=building_blocks,
                     **state_pool_opt,

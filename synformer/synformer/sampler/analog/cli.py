@@ -41,6 +41,7 @@ def _building_blocks_option(p: str) -> list[tuple[Molecule, float]]:
 @click.option("--time-limit", type=int, default=180)
 @click.option("--dont-sort", is_flag=True)
 @click.option("--score-min", type=float, default=0.0)
+@click.option("--prob", "-p", type=float, default=1.0)
 @click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
 @click.option("--building-blocks", "-bb", type=_building_blocks_option, default=None)
 def main(
@@ -56,6 +57,7 @@ def main(
     time_limit: int,
     dont_sort: bool,
     score_min: float,
+    prob: float,
     novel_templates: list[tuple[Reaction, float]] | None,
     building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
 ):
@@ -74,6 +76,7 @@ def main(
         time_limit=time_limit,
         sort_by_scores=not dont_sort,
         score_min=score_min,
+        prob_diffusion=prob,
     )
 
 
@@ -95,7 +98,7 @@ def main(
 )
 @click.option(
     "--mat-path",
-    "-p",
+    "-mat",
     type=click.Path(exists=True, path_type=pathlib.Path),
     default="data/matrix.pkl",
 )
@@ -106,6 +109,7 @@ def main(
 @click.option("--max_evolve_steps", type=int, default=12)
 @click.option("--dont-sort", is_flag=True)
 @click.option("--score-min", type=float, default=0.0)
+@click.option("--prob", "-p", type=float, default=1.0)
 @click.option("--novel-templates", "-n", type=_novel_templates_option, default=None)
 @click.option("--building-blocks", "-bb", type=_building_blocks_option, default=None)
 def main_cpu(
@@ -121,6 +125,7 @@ def main_cpu(
     max_evolve_steps: int,
     dont_sort: bool,
     score_min: float,
+    prob: float,
     novel_templates: list[tuple[Reaction, float]] | None,
     building_blocks: list[tuple[Molecule, float]] | None, # Building blocks to bias towards, must be .csv format
 ):
@@ -139,9 +144,10 @@ def main_cpu(
         max_evolve_steps = max_evolve_steps,
         sort_by_scores=not dont_sort,
         score_min=score_min,
+        prob_diffusion=prob,
     )
 
 
 
 if __name__ == "__main__":
-    main_cpu()
+    main()

@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 import math
+import numpy as np
+from rdkit.Chem import BRICS
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -16,7 +18,7 @@ from .classifier_head import ClassifierHead
 from .decoder import Decoder
 from .encoder import get_encoder
 from .fingerprint_head import ReactantRetrievalResult, get_fingerprint_head
-
+from .fragment_head import FragmentHead
 
 @dataclasses.dataclass
 class _ReactantItem:
@@ -44,6 +46,7 @@ class PredictResult:
     token_sampled: torch.Tensor
     reaction_logits: torch.Tensor
     retrieved_reactants: ReactantRetrievalResult
+    retrieved_reactants_fragments: ReactantRetrievalResult
 
     def to(self, device: torch.device):
         self.__class__(
@@ -134,12 +137,29 @@ class PredictResult:
         return list(possible_actions), list(norm_priors)
 
 
-    def top_reactants(self, topk: int, rxn_matrix: ReactantReactionMatrix, building_blocks: list[tuple[Molecule, float]] | None = None,) -> list[list[_ReactantItem]]:
-        bsz = self.retrieved_reactants.reactants.shape[0]
-        score_all = 1.0 / (self.retrieved_reactants.distance.reshape(bsz, -1) + 0.1)
-        index_all = self.retrieved_reactants.indices.reshape(bsz, -1)
-        mols = self.retrieved_reactants.reactants.reshape(bsz, -1)
+    def top_reactants(self, topk: int, rxn_matrix: ReactantReactionMatrix, building_blocks: list[tuple[Molecule, float]] | None = None, diffusion: bool = True, excl_frag: list | None = None) -> list[list[_ReactantItem]]:
+        
+        if diffusion:
+            reactants = self.retrieved_reactants
+        else:
+            reactants = self.retrieved_reactants_fragments
 
+        bsz = reactants.reactants.shape[0]
+        score_all = 1.0 / (reactants.distance.reshape(bsz, -1) + 0.1)
+        index_all = reactants.indices.reshape(bsz, -1)
+        mols = reactants.reactants.reshape(bsz, -1)
+        
+        if excl_frag:
+            mask = np.ones_like(score_all, dtype=bool) 
+            for i in range(bsz):
+                for j in range(mols.shape[-1]):
+                    mol = mols[i, j]
+                    fragments = BRICS.BRICSDecompose(mol._rdmol)
+                    if len(fragments & set(excl_frag)) > 0:  # overlap exists
+                        mask[i, j] = False
+
+            score_all = np.where(mask, score_all, -np.inf)  # Set scores to -inf to exclude
+        
         topk = min(topk, mols.shape[-1])
         best_index = (-score_all).argsort(axis=-1)
 
@@ -273,7 +293,8 @@ class Synformer(nn.Module):
         self.token_head = ClassifierHead(self.d_model, max(TokenType) + 1)
         self.reaction_head = ClassifierHead(self.d_model, cfg.decoder.num_reaction_classes)
         self.fingerprint_head = get_fingerprint_head(cfg.fingerprint_head_type, cfg.fingerprint_head)
-
+        self.fragment_head = FragmentHead(self.fingerprint_head.fingerprint_dim)
+                                         
     def encode(self, batch: ProjectionBatch):
         return self.encoder(batch)
 
@@ -389,6 +410,8 @@ class Synformer(nn.Module):
         reactant_fps: torch.Tensor,
         rxn_matrix: ReactantReactionMatrix,
         fpindex: FingerprintIndex,
+        target_mol: Molecule, # Used in fragment-search but not in diffusion
+        prob_diffusion: float = 1.0,
         topk: int = 4,
         temperature_token: float = 0.1,
         **options,
@@ -416,7 +439,15 @@ class Synformer(nn.Module):
             mask=token_sampled == TokenType.REACTANT,
             **options,
         )
-        return PredictResult(token_logits, token_sampled, reaction_logits, retrieved_reactants)
+
+        retrieved_reactants_fragments = self.fragment_head.retrieve_reactants(
+            h_next,
+            fpindex,
+            target_mol,
+            topk,
+        )
+
+        return PredictResult(token_logits, token_sampled, reaction_logits, retrieved_reactants, retrieved_reactants_fragments)
 
     @torch.no_grad()
     def generate_without_stack(
