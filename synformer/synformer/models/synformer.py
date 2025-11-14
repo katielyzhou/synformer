@@ -5,7 +5,6 @@ from torch import nn
 from tqdm.auto import tqdm
 import math
 import numpy as np
-from rdkit.Chem import BRICS
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -115,7 +114,7 @@ class PredictResult:
         base_index = len(rxn_matrix.reactions) if rxn_matrix else max([a.index for a in possible_actions], default=-1) + 1
 
         for i, (template, score) in enumerate(novel_templates):
-            new_prior = min_prior + (score * prior_range) + (score * prior_range)
+            new_prior = min_prior + (score * prior_range) + 0.1
     
             unique_index = base_index + i
 
@@ -137,7 +136,9 @@ class PredictResult:
         return list(possible_actions), list(norm_priors)
 
 
-    def top_reactants(self, topk: int, rxn_matrix: ReactantReactionMatrix, building_blocks: list[tuple[Molecule, float]] | None = None, diffusion: bool = True, excl_frag: list | None = None) -> list[list[_ReactantItem]]:
+    def top_reactants(self, topk: int, rxn_matrix: ReactantReactionMatrix,
+                      building_blocks: list[tuple[Molecule, float]] | None = None,
+                      diffusion: bool = True) -> list[list[_ReactantItem]]:
         
         if diffusion:
             reactants = self.retrieved_reactants
@@ -148,17 +149,6 @@ class PredictResult:
         score_all = 1.0 / (reactants.distance.reshape(bsz, -1) + 0.1)
         index_all = reactants.indices.reshape(bsz, -1)
         mols = reactants.reactants.reshape(bsz, -1)
-        
-        if excl_frag:
-            mask = np.ones_like(score_all, dtype=bool) 
-            for i in range(bsz):
-                for j in range(mols.shape[-1]):
-                    mol = mols[i, j]
-                    fragments = BRICS.BRICSDecompose(mol._rdmol)
-                    if len(fragments & set(excl_frag)) > 0:  # overlap exists
-                        mask[i, j] = False
-
-            score_all = np.where(mask, score_all, -np.inf)  # Set scores to -inf to exclude
         
         topk = min(topk, mols.shape[-1])
         best_index = (-score_all).argsort(axis=-1)
@@ -411,7 +401,6 @@ class Synformer(nn.Module):
         rxn_matrix: ReactantReactionMatrix,
         fpindex: FingerprintIndex,
         target_mol: Molecule, # Used in fragment-search but not in diffusion
-        prob_diffusion: float = 1.0,
         topk: int = 4,
         temperature_token: float = 0.1,
         **options,
