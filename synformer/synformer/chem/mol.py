@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 from rdkit import Chem
-from rdkit.Chem import AllChem, DataStructs, Draw
+from rdkit.Chem import AllChem, DataStructs, Draw, BRICS
 from rdkit.Chem.Pharm2D import Generate as Generate2D
 from rdkit.Chem.Pharm2D import Gobbi_Pharm2D
 from rdkit.Chem.Scaffolds import MurckoScaffold
@@ -220,6 +220,9 @@ class Molecule(Drawable):
     @cached_property
     def csmiles_sha256(self) -> bytes:
         return hashlib.sha256(self.csmiles.encode()).digest()
+    
+    def get_fragments(self) -> list[str]:
+        return BRICS.BRICSDecompose(self._rdmol)
 
 
 def read_mol_file(

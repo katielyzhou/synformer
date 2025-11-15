@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 import math
-import numpy as np
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -140,13 +139,16 @@ class PredictResult:
                       building_blocks: list[tuple[Molecule, float]] | None = None,
                       diffusion: bool = True) -> list[list[_ReactantItem]]:
         
-        if diffusion:
-            reactants = self.retrieved_reactants
-        else:
-            reactants = self.retrieved_reactants_fragments
-
+        reactants = self.retrieved_reactants if diffusion else self.retrieved_reactants_fragments
         bsz = reactants.reactants.shape[0]
-        score_all = 1.0 / (reactants.distance.reshape(bsz, -1) + 0.1)
+
+        score_all = 1.0 / (reactants.distance.reshape(bsz, -1) + 0.1) if diffusion else (
+            1.0 / (reactants.distance + 0.1)
+        )
+        if not diffusion:
+            score_norm = score_all / (score_all.sum(axis=-1, keepdims=True) + 1e-8)
+            score_all = score_norm.reshape(bsz, -1)
+
         index_all = reactants.indices.reshape(bsz, -1)
         mols = reactants.reactants.reshape(bsz, -1)
         

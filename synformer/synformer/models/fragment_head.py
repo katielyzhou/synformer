@@ -6,7 +6,6 @@ import numpy as np
 import torch
 
 from rdkit import Chem
-from rdkit.Chem import BRICS
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.mol import Molecule, FingerprintOption
@@ -39,7 +38,7 @@ class FragmentHead:
         """
         Return a list of candidate fragment fingerprints to consider for building blocks.
         """
-        fragments=BRICS.BRICSDecompose(target_mol._rdmol)
+        fragments = target_mol.get_fragments()
 
         frag_mol = [Molecule.from_rdmol(Chem.MolFromSmiles(frag)) for frag in fragments]
         frag_fp = [i.get_fingerprint(self._fp_option) for i in frag_mol] # returns np arrays
